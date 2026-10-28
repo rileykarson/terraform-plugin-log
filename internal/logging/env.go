@@ -56,7 +56,9 @@ func parseEnvLogLevel(envVar string) (hclog.Level, bool) {
 
 // ResolveRootSDKEnvLevel resolves the effective log level for the root SDK
 // logger when configured via WithLevelFromEnv, allowing SDK logging to behave
-// consistently across production and acceptance testing.
+// consistently across production and acceptance testing. Sinks maintain an
+// internal level when no env vars are set, and need to know whether the level
+// was explicitly configured or not.
 //
 // Environment variable precedence:
 //  1. TF_LOG_SDK
@@ -64,34 +66,36 @@ func parseEnvLogLevel(envVar string) (hclog.Level, bool) {
 //  3. TF_LOG
 //  4. TF_ACC_LOG_PATH (if non-empty, defaults to hclog.Trace)
 //  5. Default: hclog.Off
-func ResolveRootSDKEnvLevel() hclog.Level {
+func ResolveRootSDKEnvLevel() (hclog.Level, bool) {
 	return resolveRootEnvLevel(envLogSDK, envLogProvider, envLog)
 }
 
 // ResolveRootProviderEnvLevel resolves the effective log level for the root
 // provider logger when configured via WithLevelFromEnv, allowing provider
 // logging to behave consistently across production and acceptance testing.
+// Sinks maintain an internal level when no env vars are set, and need to know
+// whether the level was explicitly configured or not.
 //
 // Environment variable precedence:
 //  1. TF_LOG_PROVIDER
 //  2. TF_LOG
 //  3. TF_ACC_LOG_PATH (if non-empty, defaults to hclog.Trace)
 //  4. Default: hclog.Off
-func ResolveRootProviderEnvLevel() hclog.Level {
+func ResolveRootProviderEnvLevel() (hclog.Level, bool) {
 	return resolveRootEnvLevel(envLogProvider, envLog)
 }
 
-func resolveRootEnvLevel(envVars ...string) hclog.Level {
+func resolveRootEnvLevel(envVars ...string) (hclog.Level, bool) {
 	for _, envVar := range envVars {
 		if lvl, ok := parseEnvLogLevel(envVar); ok {
-			return lvl
+			return lvl, true
 		}
 	}
 
 	// helper/resource makes this default to TRACE, so we should, too.
 	if strings.TrimSpace(os.Getenv(envAccLogFile)) != "" {
-		return hclog.Trace
+		return hclog.Trace, true
 	}
 
-	return hclog.Off
+	return hclog.Off, false
 }
