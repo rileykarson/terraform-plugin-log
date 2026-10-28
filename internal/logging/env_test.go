@@ -171,7 +171,7 @@ func TestResolveRootLoggerEnvLevels_Matrix(t *testing.T) {
 			providerOpts := logging.ApplyLoggerOpts(logging.WithLevelFromEnv("TF_LOG_PROVIDER", "xxx"))
 			gotProvider := providerOpts.Level
 			if gotProvider == hclog.NoLevel && providerOpts.LevelFromEnv {
-				gotProvider = logging.ResolveRootProviderEnvLevel()
+				gotProvider, _ = logging.ResolveRootProviderEnvLevel()
 			}
 			if diff := cmp.Diff(gotProvider, testCase.expectedProvider); diff != "" {
 				t.Errorf("unexpected provider level difference: %s", diff)
@@ -180,7 +180,7 @@ func TestResolveRootLoggerEnvLevels_Matrix(t *testing.T) {
 			sdkOpts := logging.ApplyLoggerOpts(logging.WithLevelFromEnv("TF_LOG_SDK"))
 			gotSDK := sdkOpts.Level
 			if gotSDK == hclog.NoLevel && sdkOpts.LevelFromEnv {
-				gotSDK = logging.ResolveRootSDKEnvLevel()
+				gotSDK, _ = logging.ResolveRootSDKEnvLevel()
 			}
 			if diff := cmp.Diff(gotSDK, testCase.expectedSDK); diff != "" {
 				t.Errorf("unexpected SDK level difference: %s", diff)
@@ -191,12 +191,14 @@ func TestResolveRootLoggerEnvLevels_Matrix(t *testing.T) {
 
 func TestResolveRootSDKEnvLevel(t *testing.T) {
 	testCases := map[string]struct {
-		env      map[string]string
-		expected hclog.Level
+		env        map[string]string
+		expected   hclog.Level
+		expectedOk bool
 	}{
 		"default-off-when-all-unset": {
-			env:      map[string]string{},
-			expected: hclog.Off,
+			env:        map[string]string{},
+			expected:   hclog.Off,
+			expectedOk: false,
 		},
 		"tf-log-sdk-set": {
 			env: map[string]string{
@@ -204,59 +206,75 @@ func TestResolveRootSDKEnvLevel(t *testing.T) {
 				"TF_LOG_PROVIDER": "WARN",
 				"TF_LOG":          "ERROR",
 			},
-			expected: hclog.Info,
+			expected:   hclog.Info,
+			expectedOk: true,
 		},
 		"tf-log-sdk-off-overrides-tf-log-trace": {
 			env: map[string]string{
 				"TF_LOG_SDK": "OFF",
 				"TF_LOG":     "TRACE",
 			},
-			expected: hclog.Off,
+			expected:   hclog.Off,
+			expectedOk: true,
 		},
 		"tf-log-sdk-invalid-overrides-tf-log-error": {
 			env: map[string]string{
 				"TF_LOG_SDK": "1",
 				"TF_LOG":     "ERROR",
 			},
-			expected: hclog.Trace,
+			expected:   hclog.Trace,
+			expectedOk: true,
 		},
 		"tf-log-provider-fallback": {
 			env: map[string]string{
 				"TF_LOG_PROVIDER": "WARN",
 				"TF_LOG":          "ERROR",
 			},
-			expected: hclog.Warn,
+			expected:   hclog.Warn,
+			expectedOk: true,
 		},
 		"tf-log-provider-off-overrides-tf-log-trace": {
 			env: map[string]string{
 				"TF_LOG_PROVIDER": "OFF",
 				"TF_LOG":          "TRACE",
 			},
-			expected: hclog.Off,
+			expected:   hclog.Off,
+			expectedOk: true,
 		},
 		"tf-log-fallback": {
 			env: map[string]string{
 				"TF_LOG": "DEBUG",
 			},
-			expected: hclog.Debug,
+			expected:   hclog.Debug,
+			expectedOk: true,
+		},
+		"tf-log-off-fallback": {
+			env: map[string]string{
+				"TF_LOG": "OFF",
+			},
+			expected:   hclog.Off,
+			expectedOk: true,
 		},
 		"tf-log-json-fallback": {
 			env: map[string]string{
 				"TF_LOG": "JSON",
 			},
-			expected: hclog.Trace,
+			expected:   hclog.Trace,
+			expectedOk: true,
 		},
 		"tf-acc-log-path-fallback": {
 			env: map[string]string{
 				"TF_ACC_LOG_PATH": "/tmp/acc.log",
 			},
-			expected: hclog.Trace,
+			expected:   hclog.Trace,
+			expectedOk: true,
 		},
 		"invalid-tf-log-defaults-trace": {
 			env: map[string]string{
 				"TF_LOG": "INVALID",
 			},
-			expected: hclog.Trace,
+			expected:   hclog.Trace,
+			expectedOk: true,
 		},
 	}
 
@@ -270,9 +288,12 @@ func TestResolveRootSDKEnvLevel(t *testing.T) {
 				t.Setenv(k, v)
 			}
 
-			got := logging.ResolveRootSDKEnvLevel()
+			got, gotOk := logging.ResolveRootSDKEnvLevel()
 			if diff := cmp.Diff(got, testCase.expected); diff != "" {
 				t.Errorf("unexpected difference: %s", diff)
+			}
+			if gotOk != testCase.expectedOk {
+				t.Errorf("expected ResolveRootSDKEnvLevel ok=%v, got %v", testCase.expectedOk, gotOk)
 			}
 		})
 	}
@@ -280,57 +301,73 @@ func TestResolveRootSDKEnvLevel(t *testing.T) {
 
 func TestResolveRootProviderEnvLevel(t *testing.T) {
 	testCases := map[string]struct {
-		env      map[string]string
-		expected hclog.Level
+		env        map[string]string
+		expected   hclog.Level
+		expectedOk bool
 	}{
 		"default-off-when-all-unset": {
-			env:      map[string]string{},
-			expected: hclog.Off,
+			env:        map[string]string{},
+			expected:   hclog.Off,
+			expectedOk: false,
 		},
 		"tf-log-provider-fallback": {
 			env: map[string]string{
 				"TF_LOG_PROVIDER": "WARN",
 				"TF_LOG":          "ERROR",
 			},
-			expected: hclog.Warn,
+			expected:   hclog.Warn,
+			expectedOk: true,
 		},
 		"tf-log-provider-off-overrides-tf-log-trace": {
 			env: map[string]string{
 				"TF_LOG_PROVIDER": "OFF",
 				"TF_LOG":          "TRACE",
 			},
-			expected: hclog.Off,
+			expected:   hclog.Off,
+			expectedOk: true,
 		},
 		"tf-log-provider-invalid-overrides-tf-log-error": {
 			env: map[string]string{
 				"TF_LOG_PROVIDER": "1",
 				"TF_LOG":          "ERROR",
 			},
-			expected: hclog.Trace,
+			expected:   hclog.Trace,
+			expectedOk: true,
 		},
 		"tf-log-fallback": {
 			env: map[string]string{
 				"TF_LOG": "DEBUG",
 			},
-			expected: hclog.Debug,
+			expected:   hclog.Debug,
+			expectedOk: true,
+		},
+		"tf-log-off-fallback": {
+			env: map[string]string{
+				"TF_LOG": "OFF",
+			},
+			expected:   hclog.Off,
+			expectedOk: true,
 		},
 		"tf-log-json-fallback": {
 			env: map[string]string{
 				"TF_LOG": "JSON",
 			},
-			expected: hclog.Trace,
+			expected:   hclog.Trace,
+			expectedOk: true,
 		},
 		"tf-acc-log-path-fallback": {
 			env: map[string]string{
 				"TF_ACC_LOG_PATH": "/tmp/acc.log",
 			},
-			expected: hclog.Trace,
+			expected:   hclog.Trace,
+			expectedOk: true,
 		},
 		"invalid-tf-log-defaults-trace": {
 			env: map[string]string{
 				"TF_LOG": "INVALID",
 			},
-			expected: hclog.Trace,
+			expected:   hclog.Trace,
+			expectedOk: true,
 		},
 	}
 
@@ -344,9 +381,12 @@ func TestResolveRootProviderEnvLevel(t *testing.T) {
 				t.Setenv(k, v)
 			}
 
-			got := logging.ResolveRootProviderEnvLevel()
+			got, gotOk := logging.ResolveRootProviderEnvLevel()
 			if diff := cmp.Diff(got, testCase.expected); diff != "" {
 				t.Errorf("unexpected difference: %s", diff)
+			}
+			if gotOk != testCase.expectedOk {
+				t.Errorf("expected ResolveRootProviderEnvLevel ok=%v, got %v", testCase.expectedOk, gotOk)
 			}
 		})
 	}

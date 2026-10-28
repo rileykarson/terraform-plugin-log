@@ -6,6 +6,10 @@ package tflog_test
 import (
 	"bytes"
 	"context"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -213,6 +217,252 @@ func TestWithLevelFromEnv(t *testing.T) {
 			}
 			if diff := cmp.Diff(testCase.expectedSubsystemOutput, gotSub); diff != "" {
 				t.Errorf("unexpected subsystem output difference: %s", diff)
+			}
+		})
+	}
+}
+
+func TestWithLevelFromEnv_Sinks(t *testing.T) {
+	testLoggingCases := map[string]struct {
+		env                map[string]string
+		expectedIsTrace    bool
+		expectedIsDebug    bool
+		expectedIsInfo     bool
+		expectedEmitted    []string
+		expectedSuppressed []string
+	}{
+		"all-unset": {
+			env:                map[string]string{},
+			expectedIsTrace:    false,
+			expectedIsDebug:    false,
+			expectedIsInfo:     false,
+			expectedSuppressed: []string{"root trace", "root debug", "root info", "sub trace", "sub debug"},
+		},
+		"tf-log-debug": {
+			env: map[string]string{
+				"TF_LOG": "DEBUG",
+			},
+			expectedIsTrace:    false,
+			expectedIsDebug:    true,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root debug", "root info", "sub debug"},
+			expectedSuppressed: []string{"root trace", "sub trace"},
+		},
+		"tf-log-provider-debug": {
+			env: map[string]string{
+				"TF_LOG_PROVIDER": "DEBUG",
+			},
+			expectedIsTrace:    false,
+			expectedIsDebug:    true,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root debug", "root info", "sub debug"},
+			expectedSuppressed: []string{"root trace", "sub trace"},
+		},
+		"tf-log-truthy": {
+			env: map[string]string{
+				"TF_LOG": "1",
+			},
+			expectedIsTrace: true,
+			expectedIsDebug: true,
+			expectedIsInfo:  true,
+			expectedEmitted: []string{"root trace", "root debug", "root info", "sub trace", "sub debug"},
+		},
+		"tf-log-truthy-with-tf-log-provider-debug": {
+			env: map[string]string{
+				"TF_LOG":          "1",
+				"TF_LOG_PROVIDER": "DEBUG",
+			},
+			expectedIsTrace:    false,
+			expectedIsDebug:    true,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root debug", "root info", "sub debug"},
+			expectedSuppressed: []string{"root trace", "sub trace"},
+		},
+	}
+
+	for name, testCase := range testLoggingCases {
+		t.Run("ContextWithTestLogging-"+name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "test.log")
+			t.Setenv("TF_LOG", "")
+			t.Setenv("TF_LOG_PROVIDER", "")
+			t.Setenv("TF_LOG_PROVIDER_EXAMPLE", "")
+			t.Setenv("TF_LOG_PROVIDER_EXAMPLE_SINK_SUB", "")
+			t.Setenv("TF_ACC_LOG_PATH", "")
+			t.Setenv("TF_LOG_PATH_MASK", "")
+			t.Setenv("TF_LOG_PATH", logPath)
+			for k, v := range testCase.env {
+				t.Setenv(k, v)
+			}
+
+			ctx := tfsdklog.ContextWithTestLogging(context.Background(), t.Name())
+			ctx = tfsdklog.NewRootProviderLogger(ctx, tflog.WithLevelFromEnv("TF_LOG_PROVIDER", "example"))
+			ctx = tflog.NewSubsystem(ctx, "sink_sub", tflog.WithLevelFromEnv("TF_LOG_PROVIDER", "example", "sink_sub"))
+
+			if got := tflog.IsTrace(ctx); got != testCase.expectedIsTrace {
+				t.Errorf("expected IsTrace=%v, got %v", testCase.expectedIsTrace, got)
+			}
+			if got := tflog.IsDebug(ctx); got != testCase.expectedIsDebug {
+				t.Errorf("expected IsDebug=%v, got %v", testCase.expectedIsDebug, got)
+			}
+			if got := tflog.IsInfo(ctx); got != testCase.expectedIsInfo {
+				t.Errorf("expected IsInfo=%v, got %v", testCase.expectedIsInfo, got)
+			}
+			if got := tflog.SubsystemIsTrace(ctx, "sink_sub"); got != testCase.expectedIsTrace {
+				t.Errorf("expected SubsystemIsTrace=%v, got %v", testCase.expectedIsTrace, got)
+			}
+			if got := tflog.SubsystemIsDebug(ctx, "sink_sub"); got != testCase.expectedIsDebug {
+				t.Errorf("expected SubsystemIsDebug=%v, got %v", testCase.expectedIsDebug, got)
+			}
+			if got := tflog.SubsystemIsInfo(ctx, "sink_sub"); got != testCase.expectedIsInfo {
+				t.Errorf("expected SubsystemIsInfo=%v, got %v", testCase.expectedIsInfo, got)
+			}
+
+			tflog.Trace(ctx, "root trace")
+			tflog.Debug(ctx, "root debug")
+			tflog.Info(ctx, "root info")
+			tflog.SubsystemTrace(ctx, "sink_sub", "sub trace")
+			tflog.SubsystemDebug(ctx, "sink_sub", "sub debug")
+
+			rawOut, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("unable to read TF_LOG_PATH file: %s", err)
+			}
+			out := string(rawOut)
+			for _, msg := range testCase.expectedEmitted {
+				if !strings.Contains(out, msg) {
+					t.Errorf("expected log output to contain %q, got: %s", msg, out)
+				}
+			}
+			for _, msg := range testCase.expectedSuppressed {
+				if strings.Contains(out, msg) {
+					t.Errorf("expected log output not to contain %q, got: %s", msg, out)
+				}
+			}
+		})
+	}
+
+	standardLoggingCases := map[string]struct {
+		env                map[string]string
+		expectedIsTrace    bool
+		expectedIsDebug    bool
+		expectedIsInfo     bool
+		expectedEmitted    []string
+		expectedSuppressed []string
+	}{
+		"all-unset-preserves-default-info": {
+			env:                map[string]string{},
+			expectedIsTrace:    false,
+			expectedIsDebug:    false,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root info"},
+			expectedSuppressed: []string{"root trace", "root debug"},
+		},
+		"tf-log-off": {
+			env: map[string]string{
+				"TF_LOG": "OFF",
+			},
+			expectedIsTrace:    false,
+			expectedIsDebug:    false,
+			expectedIsInfo:     false,
+			expectedSuppressed: []string{"root trace", "root debug", "root info"},
+		},
+		"tf-log-debug": {
+			env: map[string]string{
+				"TF_LOG": "DEBUG",
+			},
+			expectedIsTrace:    false,
+			expectedIsDebug:    true,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root debug", "root info"},
+			expectedSuppressed: []string{"root trace"},
+		},
+		"tf-log-provider-debug": {
+			env: map[string]string{
+				"TF_LOG_PROVIDER": "DEBUG",
+			},
+			expectedIsTrace:    false,
+			expectedIsDebug:    true,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root debug", "root info"},
+			expectedSuppressed: []string{"root trace"},
+		},
+		"tf-log-truthy": {
+			env: map[string]string{
+				"TF_LOG": "1",
+			},
+			expectedIsTrace: true,
+			expectedIsDebug: true,
+			expectedIsInfo:  true,
+			expectedEmitted: []string{"root trace", "root debug", "root info"},
+		},
+		"tf-log-truthy-with-tf-log-provider-debug": {
+			env: map[string]string{
+				"TF_LOG":          "1",
+				"TF_LOG_PROVIDER": "DEBUG",
+			},
+			expectedIsTrace:    false,
+			expectedIsDebug:    true,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root debug", "root info"},
+			expectedSuppressed: []string{"root trace"},
+		},
+	}
+
+	for name, testCase := range standardLoggingCases {
+		t.Run("ContextWithStandardLogging-"+name, func(t *testing.T) {
+			t.Setenv("TF_LOG", "")
+			t.Setenv("TF_LOG_PROVIDER", "")
+			t.Setenv("TF_LOG_PROVIDER_EXAMPLE", "")
+			t.Setenv("TF_LOG_PROVIDER_EXAMPLE_SINK_SUB", "")
+			t.Setenv("TF_ACC_LOG_PATH", "")
+			for k, v := range testCase.env {
+				t.Setenv(k, v)
+			}
+
+			var stdBuf bytes.Buffer
+			origOut := log.Default().Writer()
+			log.Default().SetOutput(&stdBuf)
+			t.Cleanup(func() {
+				log.Default().SetOutput(origOut)
+			})
+
+			ctx := tfsdklog.ContextWithStandardLogging(context.Background(), t.Name())
+			ctx = tfsdklog.NewRootProviderLogger(ctx, tflog.WithLevelFromEnv("TF_LOG_PROVIDER", "example"))
+			ctx = tflog.NewSubsystem(ctx, "sink_sub", tflog.WithLevelFromEnv("TF_LOG_PROVIDER", "example", "sink_sub"))
+
+			if got := tflog.IsTrace(ctx); got != testCase.expectedIsTrace {
+				t.Errorf("expected IsTrace=%v, got %v", testCase.expectedIsTrace, got)
+			}
+			if got := tflog.IsDebug(ctx); got != testCase.expectedIsDebug {
+				t.Errorf("expected IsDebug=%v, got %v", testCase.expectedIsDebug, got)
+			}
+			if got := tflog.IsInfo(ctx); got != testCase.expectedIsInfo {
+				t.Errorf("expected IsInfo=%v, got %v", testCase.expectedIsInfo, got)
+			}
+			if got := tflog.SubsystemIsTrace(ctx, "sink_sub"); got != testCase.expectedIsTrace {
+				t.Errorf("expected SubsystemIsTrace=%v, got %v", testCase.expectedIsTrace, got)
+			}
+			if got := tflog.SubsystemIsDebug(ctx, "sink_sub"); got != testCase.expectedIsDebug {
+				t.Errorf("expected SubsystemIsDebug=%v, got %v", testCase.expectedIsDebug, got)
+			}
+			if got := tflog.SubsystemIsInfo(ctx, "sink_sub"); got != testCase.expectedIsInfo {
+				t.Errorf("expected SubsystemIsInfo=%v, got %v", testCase.expectedIsInfo, got)
+			}
+
+			tflog.Trace(ctx, "root trace")
+			tflog.Debug(ctx, "root debug")
+			tflog.Info(ctx, "root info")
+
+			out := stdBuf.String()
+			for _, msg := range testCase.expectedEmitted {
+				if !strings.Contains(out, msg) {
+					t.Errorf("expected standard logger output to contain %q, got: %s", msg, out)
+				}
+			}
+			for _, msg := range testCase.expectedSuppressed {
+				if strings.Contains(out, msg) {
+					t.Errorf("expected standard logger output not to contain %q, got: %s", msg, out)
+				}
 			}
 		})
 	}
