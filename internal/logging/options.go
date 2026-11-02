@@ -23,12 +23,12 @@ type LoggerOpts struct {
 	// Level is the most verbose level that a logger will write logs for.
 	Level hclog.Level
 
-	// LevelFromEnv indicates whether the logger level was configured via
+	// IsLevelFromEnv indicates whether the logger level was configured via
 	// WithLevelFromEnv. When true and Level is hclog.NoLevel (the target
 	// environment variable is unset or empty), root loggers resolve their
 	// effective level from Terraform's standard environment variable hierarchy
 	// (defaulting to hclog.Off when all TF_LOG* variables are unset).
-	LevelFromEnv bool
+	IsLevelFromEnv bool
 
 	// IncludeLocation indicates whether logs should include the location
 	// of the logging statement or not.
@@ -178,8 +178,8 @@ func (o LoggerOpts) Copy() LoggerOpts {
 		IncludeLocation:              o.IncludeLocation,
 		IncludeRootFields:            o.IncludeRootFields,
 		IncludeTime:                  o.IncludeTime,
+		IsLevelFromEnv:               o.IsLevelFromEnv,
 		Level:                        o.Level,
-		LevelFromEnv:                 o.LevelFromEnv,
 		MaskAllFieldValuesRegexes:    make([]*regexp.Regexp, len(o.MaskAllFieldValuesRegexes)),
 		MaskAllFieldValuesStrings:    make([]string, len(o.MaskAllFieldValuesStrings)),
 		MaskFieldValuesWithFieldKeys: make([]string, len(o.MaskFieldValuesWithFieldKeys)),
@@ -249,7 +249,7 @@ func WithLevelFromEnv(name string, subsystems ...string) Option {
 		}
 		envVar = strings.ToUpper(name + envVar)
 		l.Level, _ = parseEnvLogLevel(envVar)
-		l.LevelFromEnv = true
+		l.IsLevelFromEnv = true
 		return l
 	}
 }
@@ -258,7 +258,7 @@ func WithLevelFromEnv(name string, subsystems ...string) Option {
 func WithLevel(level hclog.Level) Option {
 	return func(l LoggerOpts) LoggerOpts {
 		l.Level = level
-		l.LevelFromEnv = false
+		l.IsLevelFromEnv = false
 		return l
 	}
 }

@@ -169,7 +169,7 @@ func TestResolveRootLoggerEnvLevels_Matrix(t *testing.T) {
 
 			providerOpts := logging.ApplyLoggerOpts(logging.WithLevelFromEnv("TF_LOG_PROVIDER", "xxx"))
 			gotProvider := providerOpts.Level
-			if gotProvider == hclog.NoLevel && providerOpts.LevelFromEnv {
+			if gotProvider == hclog.NoLevel && providerOpts.IsLevelFromEnv {
 				gotProvider, _ = logging.ResolveRootProviderEnvLevel()
 			}
 			if diff := cmp.Diff(gotProvider, testCase.expectedProvider); diff != "" {
@@ -178,7 +178,7 @@ func TestResolveRootLoggerEnvLevels_Matrix(t *testing.T) {
 
 			sdkOpts := logging.ApplyLoggerOpts(logging.WithLevelFromEnv("TF_LOG_SDK"))
 			gotSDK := sdkOpts.Level
-			if gotSDK == hclog.NoLevel && sdkOpts.LevelFromEnv {
+			if gotSDK == hclog.NoLevel && sdkOpts.IsLevelFromEnv {
 				gotSDK, _ = logging.ResolveRootSDKEnvLevel()
 			}
 			if diff := cmp.Diff(gotSDK, testCase.expectedSDK); diff != "" {

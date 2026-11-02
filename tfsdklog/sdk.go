@@ -29,7 +29,7 @@ func NewRootSDKLogger(ctx context.Context, options ...logging.Option) context.Co
 		if opts.Level != hclog.NoLevel {
 			logger.SetLevel(opts.Level)
 			sdkLoggerOptions.Level = opts.Level
-		} else if opts.LevelFromEnv {
+		} else if opts.IsLevelFromEnv {
 			if level, ok := logging.ResolveRootSDKEnvLevel(); ok {
 				logger.SetLevel(level)
 				sdkLoggerOptions.Level = level
@@ -54,7 +54,7 @@ func NewRootSDKLogger(ctx context.Context, options ...logging.Option) context.Co
 		return ctx
 	}
 	if opts.Level == hclog.NoLevel {
-		if opts.LevelFromEnv {
+		if opts.IsLevelFromEnv {
 			opts.Level, _ = logging.ResolveRootSDKEnvLevel()
 		} else {
 			opts.Level = hclog.Trace
@@ -102,7 +102,7 @@ func NewRootProviderLogger(ctx context.Context, options ...logging.Option) conte
 		if opts.Level != hclog.NoLevel {
 			logger.SetLevel(opts.Level)
 			providerLoggerOptions.Level = opts.Level
-		} else if opts.LevelFromEnv {
+		} else if opts.IsLevelFromEnv {
 			if level, ok := logging.ResolveRootProviderEnvLevel(); ok {
 				logger.SetLevel(level)
 				providerLoggerOptions.Level = level
@@ -120,7 +120,7 @@ func NewRootProviderLogger(ctx context.Context, options ...logging.Option) conte
 		return ctx
 	}
 	if opts.Level == hclog.NoLevel {
-		if opts.LevelFromEnv {
+		if opts.IsLevelFromEnv {
 			opts.Level, _ = logging.ResolveRootProviderEnvLevel()
 		} else {
 			opts.Level = hclog.Trace
