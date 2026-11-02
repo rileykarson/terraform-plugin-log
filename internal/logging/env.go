@@ -14,7 +14,6 @@ const (
 	envLog         = "TF_LOG"
 	envLogSDK      = "TF_LOG_SDK"
 	envLogProvider = "TF_LOG_PROVIDER"
-	envAccLogFile  = "TF_ACC_LOG_PATH"
 )
 
 // ParseLogLevel parses a Terraform log level environment variable value into
@@ -64,8 +63,7 @@ func parseEnvLogLevel(envVar string) (hclog.Level, bool) {
 //  1. TF_LOG_SDK
 //  2. TF_LOG_PROVIDER
 //  3. TF_LOG
-//  4. TF_ACC_LOG_PATH (if non-empty, defaults to hclog.Trace)
-//  5. Default: hclog.Off
+//  4. Default: hclog.Off
 func ResolveRootSDKEnvLevel() (hclog.Level, bool) {
 	return resolveRootEnvLevel(envLogSDK, envLogProvider, envLog)
 }
@@ -79,8 +77,7 @@ func ResolveRootSDKEnvLevel() (hclog.Level, bool) {
 // Environment variable precedence:
 //  1. TF_LOG_PROVIDER
 //  2. TF_LOG
-//  3. TF_ACC_LOG_PATH (if non-empty, defaults to hclog.Trace)
-//  4. Default: hclog.Off
+//  3. Default: hclog.Off
 func ResolveRootProviderEnvLevel() (hclog.Level, bool) {
 	return resolveRootEnvLevel(envLogProvider, envLog)
 }
@@ -90,11 +87,6 @@ func resolveRootEnvLevel(envVars ...string) (hclog.Level, bool) {
 		if lvl, ok := parseEnvLogLevel(envVar); ok {
 			return lvl, true
 		}
-	}
-
-	// helper/resource makes this default to TRACE, so we should, too.
-	if strings.TrimSpace(os.Getenv(envAccLogFile)) != "" {
-		return hclog.Trace, true
 	}
 
 	return hclog.Off, false

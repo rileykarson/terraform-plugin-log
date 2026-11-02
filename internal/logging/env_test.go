@@ -166,7 +166,6 @@ func TestResolveRootLoggerEnvLevels_Matrix(t *testing.T) {
 			t.Setenv("TF_LOG_SDK", testCase.tfLogSDK)
 			t.Setenv("TF_LOG_PROVIDER", testCase.tfLogProvider)
 			t.Setenv("TF_LOG_PROVIDER_XXX", testCase.tfLogProviderName)
-			t.Setenv("TF_ACC_LOG_PATH", "")
 
 			providerOpts := logging.ApplyLoggerOpts(logging.WithLevelFromEnv("TF_LOG_PROVIDER", "xxx"))
 			gotProvider := providerOpts.Level
@@ -262,12 +261,19 @@ func TestResolveRootSDKEnvLevel(t *testing.T) {
 			expected:   hclog.Trace,
 			expectedOk: true,
 		},
-		"tf-acc-log-path-fallback": {
+		"tf-acc-log-path-ignored": {
 			env: map[string]string{
 				"TF_ACC_LOG_PATH": "/tmp/acc.log",
 			},
-			expected:   hclog.Trace,
-			expectedOk: true,
+			expected:   hclog.Off,
+			expectedOk: false,
+		},
+		"tf-log-path-mask-ignored": {
+			env: map[string]string{
+				"TF_LOG_PATH_MASK": "/tmp/test-%s.log",
+			},
+			expected:   hclog.Off,
+			expectedOk: false,
 		},
 		"invalid-tf-log-defaults-trace": {
 			env: map[string]string{
@@ -284,6 +290,7 @@ func TestResolveRootSDKEnvLevel(t *testing.T) {
 			t.Setenv("TF_LOG_SDK", "")
 			t.Setenv("TF_LOG_PROVIDER", "")
 			t.Setenv("TF_ACC_LOG_PATH", "")
+			t.Setenv("TF_LOG_PATH_MASK", "")
 			for k, v := range testCase.env {
 				t.Setenv(k, v)
 			}
@@ -355,12 +362,19 @@ func TestResolveRootProviderEnvLevel(t *testing.T) {
 			expected:   hclog.Trace,
 			expectedOk: true,
 		},
-		"tf-acc-log-path-fallback": {
+		"tf-acc-log-path-ignored": {
 			env: map[string]string{
 				"TF_ACC_LOG_PATH": "/tmp/acc.log",
 			},
-			expected:   hclog.Trace,
-			expectedOk: true,
+			expected:   hclog.Off,
+			expectedOk: false,
+		},
+		"tf-log-path-mask-ignored": {
+			env: map[string]string{
+				"TF_LOG_PATH_MASK": "/tmp/test-%s.log",
+			},
+			expected:   hclog.Off,
+			expectedOk: false,
 		},
 		"invalid-tf-log-defaults-trace": {
 			env: map[string]string{
@@ -377,6 +391,7 @@ func TestResolveRootProviderEnvLevel(t *testing.T) {
 			t.Setenv("TF_LOG_SDK", "")
 			t.Setenv("TF_LOG_PROVIDER", "")
 			t.Setenv("TF_ACC_LOG_PATH", "")
+			t.Setenv("TF_LOG_PATH_MASK", "")
 			for k, v := range testCase.env {
 				t.Setenv(k, v)
 			}

@@ -6,6 +6,7 @@ package tfsdklog_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -30,6 +31,18 @@ func TestWithLevelFromEnv(t *testing.T) {
 	}{
 		"default-off-when-all-unset": {
 			env:                      map[string]string{},
+			rootOption:               tfsdklog.WithLevelFromEnv("TF_LOG_SDK"),
+			subsystemOption:          tfsdklog.WithLevelFromEnv("TF_LOG_SDK", "framework"),
+			expectedRootOutput:       nil,
+			expectedSubsystemOutput:  nil,
+			expectedRootIsTrace:      false,
+			expectedSubsystemIsTrace: false,
+		},
+		"test-log-path-env-vars-ignored": {
+			env: map[string]string{
+				"TF_ACC_LOG_PATH":  "/tmp/acc.log",
+				"TF_LOG_PATH_MASK": "/tmp/test-%s.log",
+			},
 			rootOption:               tfsdklog.WithLevelFromEnv("TF_LOG_SDK"),
 			subsystemOption:          tfsdklog.WithLevelFromEnv("TF_LOG_SDK", "framework"),
 			expectedRootOutput:       nil,
@@ -194,6 +207,7 @@ func TestWithLevelFromEnv(t *testing.T) {
 			t.Setenv("TF_LOG_SDK_FRAMEWORK", "")
 			t.Setenv("TF_LOG_PROVIDER", "")
 			t.Setenv("TF_ACC_LOG_PATH", "")
+			t.Setenv("TF_LOG_PATH_MASK", "")
 			for k, v := range testCase.env {
 				t.Setenv(k, v)
 			}
@@ -258,6 +272,8 @@ func TestWithLevelFromEnv_Sinks(t *testing.T) {
 
 	testLoggingCases := map[string]struct {
 		env                map[string]string
+		useAccLogPath      bool
+		useLogPathMask     bool
 		expectedIsTrace    bool
 		expectedIsDebug    bool
 		expectedIsInfo     bool
@@ -270,6 +286,33 @@ func TestWithLevelFromEnv_Sinks(t *testing.T) {
 			expectedIsDebug:    false,
 			expectedIsInfo:     false,
 			expectedSuppressed: []string{"root trace", "root debug", "root info", "sub trace", "sub debug"},
+		},
+		"tf-acc-log-path": {
+			env:             map[string]string{},
+			useAccLogPath:   true,
+			expectedIsTrace: true,
+			expectedIsDebug: true,
+			expectedIsInfo:  true,
+			expectedEmitted: []string{"root trace", "root debug", "root info", "sub trace", "sub debug"},
+		},
+		"tf-log-path-mask-all-unset": {
+			env:                map[string]string{},
+			useLogPathMask:     true,
+			expectedIsTrace:    false,
+			expectedIsDebug:    false,
+			expectedIsInfo:     false,
+			expectedSuppressed: []string{"root trace", "root debug", "root info", "sub trace", "sub debug"},
+		},
+		"tf-log-path-mask-with-tf-log-provider-debug": {
+			env: map[string]string{
+				"TF_LOG_PROVIDER": "DEBUG",
+			},
+			useLogPathMask:     true,
+			expectedIsTrace:    false,
+			expectedIsDebug:    true,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root debug", "root info", "sub debug"},
+			expectedSuppressed: []string{"root trace", "sub trace"},
 		},
 		"tf-log-debug": {
 			env: map[string]string{
@@ -315,14 +358,25 @@ func TestWithLevelFromEnv_Sinks(t *testing.T) {
 
 	for name, testCase := range testLoggingCases {
 		t.Run("ContextWithTestLogging-"+name, func(t *testing.T) {
-			logPath := filepath.Join(t.TempDir(), "test.log")
+			tempDir := t.TempDir()
+			logPath := filepath.Join(tempDir, "test.log")
 			t.Setenv("TF_LOG", "")
 			t.Setenv("TF_LOG_SDK", "")
 			t.Setenv("TF_LOG_SDK_SINK_SUB", "")
 			t.Setenv("TF_LOG_PROVIDER", "")
 			t.Setenv("TF_ACC_LOG_PATH", "")
 			t.Setenv("TF_LOG_PATH_MASK", "")
-			t.Setenv("TF_LOG_PATH", logPath)
+			t.Setenv("TF_LOG_PATH", "")
+			switch {
+			case testCase.useAccLogPath:
+				t.Setenv("TF_ACC_LOG_PATH", logPath)
+			case testCase.useLogPathMask:
+				mask := filepath.Join(tempDir, "mask-%s.log")
+				logPath = fmt.Sprintf(mask, strings.ReplaceAll(t.Name(), "/", "__"))
+				t.Setenv("TF_LOG_PATH_MASK", mask)
+			default:
+				t.Setenv("TF_LOG_PATH", logPath)
+			}
 			for k, v := range testCase.env {
 				t.Setenv(k, v)
 			}
@@ -390,6 +444,17 @@ func TestWithLevelFromEnv_Sinks(t *testing.T) {
 			expectedEmitted:    []string{"root info"},
 			expectedSuppressed: []string{"root trace", "root debug"},
 		},
+		"test-log-path-env-vars-ignored": {
+			env: map[string]string{
+				"TF_ACC_LOG_PATH":  filepath.Join(t.TempDir(), "unused-acc.log"),
+				"TF_LOG_PATH_MASK": filepath.Join(t.TempDir(), "unused-%s.log"),
+			},
+			expectedIsTrace:    false,
+			expectedIsDebug:    false,
+			expectedIsInfo:     true,
+			expectedEmitted:    []string{"root info"},
+			expectedSuppressed: []string{"root trace", "root debug"},
+		},
 		"tf-log-off": {
 			env: map[string]string{
 				"TF_LOG": "OFF",
@@ -448,6 +513,7 @@ func TestWithLevelFromEnv_Sinks(t *testing.T) {
 			t.Setenv("TF_LOG_SDK_SINK_SUB", "")
 			t.Setenv("TF_LOG_PROVIDER", "")
 			t.Setenv("TF_ACC_LOG_PATH", "")
+			t.Setenv("TF_LOG_PATH_MASK", "")
 			for k, v := range testCase.env {
 				t.Setenv(k, v)
 			}
@@ -512,7 +578,6 @@ func BenchmarkSubsystemTraceDisabledFromEnv(b *testing.B) {
 	b.Setenv("TF_LOG_SDK", "")
 	b.Setenv("TF_LOG_SDK_FRAMEWORK", "")
 	b.Setenv("TF_LOG_PROVIDER", "")
-	b.Setenv("TF_ACC_LOG_PATH", "")
 
 	var buf bytes.Buffer
 	ctx := context.Background()

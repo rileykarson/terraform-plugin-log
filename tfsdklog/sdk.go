@@ -30,7 +30,7 @@ func NewRootSDKLogger(ctx context.Context, options ...logging.Option) context.Co
 			logger.SetLevel(opts.Level)
 			sdkLoggerOptions.Level = opts.Level
 		} else if opts.LevelFromEnv {
-			if level, ok := logging.ResolveRootSDKEnvLevel(); ok || sinkLoggerOptions.Level != hclog.NoLevel {
+			if level, ok := logging.ResolveRootSDKEnvLevel(); ok {
 				logger.SetLevel(level)
 				sdkLoggerOptions.Level = level
 			}
@@ -103,7 +103,7 @@ func NewRootProviderLogger(ctx context.Context, options ...logging.Option) conte
 			logger.SetLevel(opts.Level)
 			providerLoggerOptions.Level = opts.Level
 		} else if opts.LevelFromEnv {
-			if level, ok := logging.ResolveRootProviderEnvLevel(); ok || sinkLoggerOptions.Level != hclog.NoLevel {
+			if level, ok := logging.ResolveRootProviderEnvLevel(); ok {
 				logger.SetLevel(level)
 				providerLoggerOptions.Level = level
 			}

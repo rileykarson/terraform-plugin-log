@@ -27,9 +27,8 @@ func WithAdditionalLocationOffset(additionalLocationOffset int) logging.Option {
 // Valid environment variable values are TRACE, DEBUG, INFO, WARN, ERROR, OFF,
 // and JSON (which maps to hclog.Trace). For root provider loggers, if the
 // target environment variable is unset, the level falls back to
-// TF_LOG_PROVIDER, TF_LOG, and TF_ACC_LOG_PATH before defaulting to hclog.Off.
-// For subsystem loggers, an unset environment variable inherits the root
-// logger's level.
+// TF_LOG_PROVIDER and TF_LOG before defaulting to hclog.Off. For subsystem
+// loggers, an unset environment variable inherits the root logger's level.
 func WithLevelFromEnv(name string, subsystems ...string) logging.Option {
 	return logging.WithLevelFromEnv(name, subsystems...)
 }
